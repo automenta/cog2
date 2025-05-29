@@ -1,0 +1,170 @@
+package com.example.metta.space;
+
+import com.example.metta.atom.Atom;
+import com.example.metta.atom.ExpressionAtom;
+import com.example.metta.atom.MettaSymbols;
+import com.example.metta.atom.VariableAtom;
+import com.example.metta.matcher.Matcher;
+import com.example.metta.types.Bindings;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.Collections; // Added for Collections.emptyList in narrowVariables
+
+public class GroundingSpace implements SpaceWriter {
+
+    private final Set<Atom> atoms;
+
+    public GroundingSpace() {
+        this.atoms = new HashSet<>();
+    }
+
+    @Override
+    public void add(Atom atom) {
+        this.atoms.add(atom);
+    }
+
+    @Override
+    public boolean remove(Atom atom) {
+        return this.atoms.remove(atom);
+    }
+
+    @Override
+    public boolean replace(Atom from, Atom to) {
+        if (this.atoms.remove(from)) {
+            this.atoms.add(to);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public List<Atom> getAtoms() {
+        return new ArrayList<>(this.atoms);
+    }
+
+    @Override
+    public boolean contains(Atom atom) {
+        return this.atoms.contains(atom);
+    }
+
+    private void collectVariables(Atom pattern, Set<VariableAtom> vars) {
+        if (pattern instanceof VariableAtom) {
+            vars.add((VariableAtom) pattern);
+        } else if (pattern instanceof ExpressionAtom) {
+            for (Atom child : ((ExpressionAtom) pattern).getChildren()) {
+                collectVariables(child, vars);
+            }
+        }
+    }
+    
+    private Set<VariableAtom> getVariablesInPattern(Atom pattern) {
+        Set<VariableAtom> vars = new HashSet<>();
+        collectVariables(pattern, vars);
+        return vars;
+    }
+
+    private Bindings narrowVariables(Bindings bindings, Set<VariableAtom> relevantVars) {
+        if (relevantVars.isEmpty()) {
+            return new Bindings(); // No relevant vars, result is an empty binding set
+        }
+        Bindings narrowed = new Bindings();
+        for (VariableAtom var : relevantVars) {
+            Atom value = bindings.resolve(var);
+            if (value != null) {
+                if (value instanceof VariableAtom && relevantVars.contains(value)) {
+                    narrowed.addVariableEquality(var, (VariableAtom)value);
+                } else {
+                    // If value is a concrete atom, or a variable not in relevantVars (which means it's effectively concrete for this scope)
+                    narrowed.addValueBinding(var, value);
+                }
+            }
+            // If value is null, the variable remains unbound in the narrowed set, which is correct.
+        }
+        
+        // Ensure that equalities between relevant variables that might not have explicit value bindings
+        // are preserved. E.g. if $X=$Y and both are relevant but unbound.
+        for (VariableAtom var1 : relevantVars) {
+            for (VariableAtom var2 : relevantVars) {
+                if (var1.equals(var2)) continue;
+                // Check if var1 and var2 are equivalent in the original bindings
+                VariableAtom root1 = bindings.find(var1);
+                VariableAtom root2 = bindings.find(var2);
+                if (root1.equals(root2)) {
+                    // If they are equivalent, ensure this equality is in narrowed.
+                    // addVariableEquality is idempotent and handles existing compatible bindings.
+                    narrowed.addVariableEquality(var1, var2);
+                }
+            }
+        }
+        return narrowed;
+    }
+
+    @Override
+    public List<Bindings> query(Atom queryPattern) {
+        Set<VariableAtom> relevantVars = getVariablesInPattern(queryPattern);
+        List<Bindings> resultBindings;
+
+        if (queryPattern instanceof ExpressionAtom) {
+            ExpressionAtom exprPattern = (ExpressionAtom) queryPattern;
+            List<Atom> children = exprPattern.getChildren();
+            if (!children.isEmpty() && children.get(0).equals(MettaSymbols.COMMA_SYMBOL)) {
+                if (children.size() == 1) { // Just (,)
+                    return Collections.singletonList(narrowVariables(new Bindings(), relevantVars));
+                }
+                resultBindings = executeConjunctiveQuery(children.subList(1, children.size()), relevantVars);
+            } else {
+                resultBindings = matchAgainstSpace(queryPattern);
+            }
+        } else {
+            resultBindings = matchAgainstSpace(queryPattern);
+        }
+
+        return resultBindings.stream()
+                .map(b -> narrowVariables(b, relevantVars))
+                .filter(b -> !b.hasLoop()) 
+                .distinct() 
+                .collect(Collectors.toList());
+    }
+
+    private List<Bindings> matchAgainstSpace(Atom pattern) {
+        return this.atoms.stream()
+            .flatMap(dataAtom -> Matcher.matchAtoms(pattern, dataAtom).stream())
+            .collect(Collectors.toList());
+    }
+
+    private List<Bindings> executeConjunctiveQuery(List<Atom> subQueries, Set<VariableAtom> relevantVars) {
+        List<Bindings> accumulatedBindings = new ArrayList<>();
+        accumulatedBindings.add(new Bindings()); 
+
+        for (Atom subQueryAtom : subQueries) {
+            if (accumulatedBindings.isEmpty()) break; 
+
+            accumulatedBindings = accumulatedBindings.stream()
+                .flatMap(currentBinding -> {
+                    Atom concreteSubQuery = Matcher.applyBindings(subQueryAtom, currentBinding);
+                    return this.atoms.stream()
+                        .flatMap(dataAtom -> Matcher.matchAtoms(concreteSubQuery, dataAtom).stream())
+                        .flatMap(subBinding -> {
+                            Bindings merged = currentBinding.copy();
+                            // merge returns a list (usually 0 or 1 element for non-disjunctive merges)
+                            return merged.merge(subBinding).stream(); 
+                        });
+                })
+                .distinct() // Keep distinct bindings at each step
+                .collect(Collectors.toList());
+        }
+        return accumulatedBindings;
+    }
+
+    @Override
+    public List<Atom> subst(Atom pattern, Atom template) {
+        return query(pattern).stream()
+            .map(bindings -> Matcher.applyBindings(template, bindings))
+            .distinct()
+            .collect(Collectors.toList());
+    }
+}
