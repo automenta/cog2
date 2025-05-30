@@ -12,7 +12,7 @@ public class AtomPrinter {
     private static String quoteStringIfNeeded(String text) {
         // Conditions for quoting are:
         // 1. Empty string.
-        // 2. Contains whitespace or characters: ( ) " ' $ # ;
+        // 2. Contains whitespace or characters: ( ) " ' $ # ; (double quote)
         // 3. Can be parsed as a number (float or integer).
         boolean needsQuoting = text.isEmpty() ||
                                text.chars().anyMatch(c -> Character.isWhitespace(c) || "()\"'$#;".indexOf(c) >= 0) ||

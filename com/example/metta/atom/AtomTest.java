@@ -7,6 +7,7 @@ import com.example.metta.text.AtomPrinter; // Added import
 import java.util.List;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.ArrayList; // Added import for ArrayList
 
 public class AtomTest {
 
@@ -151,7 +152,7 @@ public class AtomTest {
         // String via DefaultGroundable: preferLiteralDisplay is false
         assertEquals("hello", AtomPrinter.print(new GroundedAtom("hello"))); // Simple string, no quoting needed
         assertEquals("\"hello world\"", AtomPrinter.print(new GroundedAtom("hello world"))); // String with space
-        assertEquals("\"hello\\tworld\"", AtomPrinter.print(new GroundedAtom("hello\tworld"))); // String with escaped tab
+        assertEquals("\"hello\tworld\"", AtomPrinter.print(new GroundedAtom("hello\tworld"))); // String with escaped tab
         assertEquals("\"hello \\\"world\\\"\"", AtomPrinter.print(new GroundedAtom("hello \"world\""))); // String with quotes
 
         // Object with complex toString via DefaultGroundable
