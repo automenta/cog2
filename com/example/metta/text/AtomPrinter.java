@@ -9,6 +9,25 @@ public class AtomPrinter {
         // Utility class
     }
 
+    private static String quoteStringIfNeeded(String text) {
+        // Conditions for quoting are:
+        // 1. Empty string.
+        // 2. Contains whitespace or characters: ( ) " ' $ # ;
+        // 3. Can be parsed as a number (float or integer).
+        boolean needsQuoting = text.isEmpty() ||
+                               text.chars().anyMatch(c -> Character.isWhitespace(c) || "()\"'$#;".indexOf(c) >= 0) ||
+                               text.matches("^[+-]?(?:\\d+\\.\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?$") || // float
+                               text.matches("^[+-]?\\d+(?:[eE][+-]?\\d+)?$");    // integer
+
+        if (needsQuoting) {
+            // Escape backslashes first, then quotes, then wrap in quotes
+            String escapedText = text.replace("\\", "\\\\") // Replace literal \ with \\
+                                     .replace("\"", "\\\"");   // Replace literal " with \"
+            return "\"" + escapedText + "\"";
+        }
+        return text;
+    }
+
     public static String print(Atom atom) {
         if (atom == null) {
             return MettaSymbols.UNDEF_TYPE.toString(); 
@@ -16,16 +35,7 @@ public class AtomPrinter {
 
         if (atom instanceof SymbolAtom) {
             String name = ((SymbolAtom) atom).getName();
-            // More robust quoting: if a symbol contains whitespace, parens, quotes, $, ;, #
-            // or if it's empty, or if it could be parsed as a number.
-            // This ensures that what is printed can be parsed back as a single symbol by SExprParser.
-            if (name.isEmpty() || 
-                name.chars().anyMatch(c -> Character.isWhitespace(c) || "()\"'$#;".indexOf(c) >= 0) ||
-                name.matches("^[+-]?(?:\\d+\\.\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?$") || // float
-                name.matches("^[+-]?\\d+(?:[eE][+-]?\\d+)?$") ) { // integer (potentially with exponent)
-                return "\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-            }
-            return name;
+            return quoteStringIfNeeded(name);
         } else if (atom instanceof VariableAtom) {
             return "$" + ((VariableAtom) atom).getName();
         } else if (atom instanceof ExpressionAtom) {
@@ -34,8 +44,14 @@ public class AtomPrinter {
                     .map(AtomPrinter::print) 
                     .collect(Collectors.joining(" ", "(", ")"));
         } else if (atom instanceof GroundedAtom) {
-            // GroundedAtom's Groundable interface is responsible for its string representation.
-            return ((GroundedAtom) atom).getGroundableInterface().toDisplayString();
+            GroundedAtom groundedAtom = (GroundedAtom) atom;
+            Groundable groundable = groundedAtom.getGroundableInterface();
+            String displayString = groundable.toDisplayString();
+            if (groundable.preferLiteralDisplay()) {
+                return displayString;
+            } else {
+                return quoteStringIfNeeded(displayString);
+            }
         } else {
             // Fallback for any unknown Atom type
             System.err.println("Warning: AtomPrinter.print encountered an unexpected Atom type: " + atom.getClass().getName());
