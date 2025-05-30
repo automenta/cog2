@@ -6,6 +6,17 @@ import java.util.List;
 import java.util.Objects;
 import java.util.ArrayList; // Added missing import
 
+/**
+ * A default implementation of the {@link Groundable} interface.
+ * This class wraps an arbitrary Java object and provides baseline behaviors:
+ * <ul>
+ *   <li>Type is derived from the object's Java class name (e.g., "Java.Integer").</li>
+ *   <li>Execution is unsupported by default.</li>
+ *   <li>Matching is based on simple equality of the wrapped Java objects.</li>
+ *   <li>Display string is the result of the object's {@code toString()} method.</li>
+ *   <li>{@code preferLiteralDisplay} returns true for {@link Number} instances.</li>
+ * </ul>
+ */
 public class DefaultGroundable implements Groundable {
     private final Object value;
 
@@ -41,6 +52,15 @@ public class DefaultGroundable implements Groundable {
         return value.toString();
     }
 
+    @Override
+    public boolean preferLiteralDisplay() {
+        return this.value instanceof Number;
+    }
+
+    /**
+     * Gets the underlying Java object wrapped by this DefaultGroundable.
+     * @return The non-null Java object.
+     */
     public Object getValue() {
         return value;
     }
