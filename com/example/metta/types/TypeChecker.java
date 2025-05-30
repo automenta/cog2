@@ -1,6 +1,7 @@
 package com.example.metta.types;
 
 import com.example.metta.atom.*;
+import com.example.metta.atom.LinkAtom; // Explicit import for LinkAtom
 import com.example.metta.matcher.Matcher;
 import com.example.metta.space.SpaceReader;
 import com.example.metta.space.WrappedSpaceAtom; // Added import
@@ -93,6 +94,12 @@ public class TypeChecker {
             Atom typeFromGroundable = gAtom.getType(); 
             Atom uniqueType = makeVariablesUnique(typeFromGroundable, new HashMap<>()); // Pass new empty map for each top-level call
             types.add(new AtomType(uniqueType, false, false));
+        } else if (atom instanceof LinkAtom) {
+            LinkAtom linkAtom = (LinkAtom) atom;
+            // A LinkAtom is typed as its specific link type (e.g., InheritanceLink)
+            types.add(new AtomType(linkAtom.getLinkType(), false, false));
+            // And also as the general LINK_TYPE_SYMBOL
+            types.add(new AtomType(MettaSymbols.LINK_TYPE_SYMBOL, false, false));
         } else if (atom instanceof ExpressionAtom) {
             ExpressionAtom exprAtom = (ExpressionAtom) atom;
             if (exprAtom.getChildren().isEmpty()) {
@@ -215,6 +222,7 @@ public class TypeChecker {
         if (expectedType.equals(MettaSymbols.EXPRESSION_TYPE) && atom instanceof ExpressionAtom) return true;
         if (expectedType.equals(MettaSymbols.GROUNDED_TYPE) && atom instanceof GroundedAtom) return true;
         if (expectedType.equals(MettaSymbols.SPACE_TYPE) && atom instanceof WrappedSpaceAtom) return true;
+        if (expectedType.equals(MettaSymbols.LINK_TYPE_SYMBOL) && atom instanceof LinkAtom) return true;
 
         List<AtomType> actualTypes = getAtomTypes(space, atom);
         for (AtomType actualType : actualTypes) {

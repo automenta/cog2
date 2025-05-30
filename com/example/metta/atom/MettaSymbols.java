@@ -28,7 +28,20 @@ public final class MettaSymbols {
     /** The symbol representing the GroundedAtom type. */
     public static final Atom GROUNDED_TYPE = new SymbolAtom("Grounded");
     /** The symbol representing a Space type. */
-    public static final Atom SPACE_TYPE = new SymbolAtom("Space"); 
+    public static final Atom SPACE_TYPE = new SymbolAtom("Space");
+
+    /** Symbol representing the generic type for all LinkAtoms, analogous to ATOM_TYPE for all atoms. */
+    public static final Atom LINK_TYPE_SYMBOL = new SymbolAtom("Link");
+    /** Symbol representing a link type for expressions that evaluate to a value (e.g., (EvaluationLink (foo bar) result)). */
+    public static final Atom EVALUATION_LINK_SYMBOL = new SymbolAtom("EvaluationLink");
+    /** Symbol representing an inheritance relationship between types or concepts (e.g., (InheritanceLink cat mammal)). */
+    public static final Atom INHERITANCE_LINK_SYMBOL = new SymbolAtom("InheritanceLink");
+    /** Symbol representing a similarity relationship between atoms (e.g., (SimilarityLink apple orange)). */
+    public static final Atom SIMILARITY_LINK_SYMBOL = new SymbolAtom("SimilarityLink");
+    /** Symbol representing a membership relationship (e.g., (MemberLink a_specific_cat cat_species)). */
+    public static final Atom MEMBER_LINK_SYMBOL = new SymbolAtom("MemberLink");
+    /** Symbol representing an instantiation relationship (e.g., (InstanceLink my_cat Cat)). */
+    public static final Atom INSTANCE_LINK_SYMBOL = new SymbolAtom("InstanceLink");
 
     /** Symbol used to denote function types (e.g., (-> A B)) or implications. */
     public static final Atom ARROW_SYMBOL = new SymbolAtom("->");
