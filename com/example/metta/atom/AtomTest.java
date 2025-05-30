@@ -3,6 +3,7 @@ package com.example.metta.atom;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.example.metta.text.AtomPrinter; // Added import
 import java.util.List;
 import java.util.Arrays;
 import java.util.Collections;
@@ -130,5 +131,90 @@ public class AtomTest {
         ExpressionAtom inner = new ExpressionAtom(List.of(new SymbolAtom("b"), new VariableAtom("y")));
         ExpressionAtom outer = new ExpressionAtom(List.of(new SymbolAtom("a"), inner, new SymbolAtom("c")));
         assertEquals("(a (b $y) c)", outer.toString());
+    }
+
+    @Test
+    public void atomPrinterBehaviors() {
+        // --- SymbolAtom Tests (via AtomPrinter) ---
+        assertEquals("test", AtomPrinter.print(new SymbolAtom("test")));
+        assertEquals("\"hello world\"", AtomPrinter.print(new SymbolAtom("hello world")));
+        assertEquals("\"123\"", AtomPrinter.print(new SymbolAtom("123"))); // Numbers as symbols are quoted
+        assertEquals("\"\"", AtomPrinter.print(new SymbolAtom("")));
+        assertEquals("\"a\\\"b\"", AtomPrinter.print(new SymbolAtom("a\"b"))); // a"b -> "a\"b"
+        assertEquals("\"a b (c)\"", AtomPrinter.print(new SymbolAtom("a b (c)")));
+
+        // --- GroundedAtom with DefaultGroundable Tests ---
+        assertEquals("42", AtomPrinter.print(new GroundedAtom(42))); // Integer
+        assertEquals("3.14", AtomPrinter.print(new GroundedAtom(3.14))); // Double
+        assertEquals("true", AtomPrinter.print(new GroundedAtom(true))); // Boolean
+
+        // String via DefaultGroundable: preferLiteralDisplay is false
+        assertEquals("hello", AtomPrinter.print(new GroundedAtom("hello"))); // Simple string, no quoting needed
+        assertEquals("\"hello world\"", AtomPrinter.print(new GroundedAtom("hello world"))); // String with space
+        assertEquals("\"hello\\tworld\"", AtomPrinter.print(new GroundedAtom("hello\tworld"))); // String with escaped tab
+        assertEquals("\"hello \\\"world\\\"\"", AtomPrinter.print(new GroundedAtom("hello \"world\""))); // String with quotes
+
+        // Object with complex toString via DefaultGroundable
+        Object customObject = new Object() {
+            @Override
+            public String toString() {
+                return "complex object with spaces";
+            }
+        };
+        assertEquals("\"complex object with spaces\"", AtomPrinter.print(new GroundedAtom(customObject)));
+
+        Object simpleCustomObject = new Object() {
+            @Override
+            public String toString() {
+                return "simple";
+            }
+        };
+        assertEquals("simple", AtomPrinter.print(new GroundedAtom(simpleCustomObject)));
+
+
+        // --- GroundedAtom with CustomGroundable Tests ---
+        class CustomGroundable implements Groundable {
+            private String display;
+            private boolean literalDisplay;
+            private Atom type;
+
+            CustomGroundable(String display, boolean literalDisplay, Atom type) {
+                this.display = display;
+                this.literalDisplay = literalDisplay;
+                this.type = type;
+            }
+
+            @Override
+            public Atom getType() { return type; }
+            @Override
+            public List<Atom> execute(List<Atom> args) { throw new UnsupportedOperationException(); }
+            @Override
+            public List<com.example.metta.types.Bindings> match(Atom other) { return Collections.emptyList(); }
+
+            @Override
+            public String toDisplayString() { return display; }
+
+            @Override
+            public boolean preferLiteralDisplay() { return literalDisplay; }
+        }
+
+        SymbolAtom customType = new SymbolAtom("CustomType");
+
+        // Scenario 1: preferLiteralDisplay = true
+        GroundedAtom gaLiteral1 = new GroundedAtom("customLiteral", new CustomGroundable("customLiteral", true, customType));
+        assertEquals("customLiteral", AtomPrinter.print(gaLiteral1));
+
+        GroundedAtom gaLiteral2 = new GroundedAtom("custom literal with space", new CustomGroundable("custom literal with space", true, customType));
+        assertEquals("custom literal with space", AtomPrinter.print(gaLiteral2)); // Printed as is
+
+        // Scenario 2: preferLiteralDisplay = false
+        GroundedAtom gaQuoted1 = new GroundedAtom("customSymbol", new CustomGroundable("customSymbol", false, customType));
+        assertEquals("customSymbol", AtomPrinter.print(gaQuoted1));
+
+        GroundedAtom gaQuoted2 = new GroundedAtom("custom symbol with space", new CustomGroundable("custom symbol with space", false, customType));
+        assertEquals("\"custom symbol with space\"", AtomPrinter.print(gaQuoted2));
+
+        GroundedAtom gaQuoted3 = new GroundedAtom("123.45", new CustomGroundable("123.45", false, customType));
+        assertEquals("\"123.45\"", AtomPrinter.print(gaQuoted3)); // Number-like string, but preferLiteralDisplay=false, so quoted
     }
 }

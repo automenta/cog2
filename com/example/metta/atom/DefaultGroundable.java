@@ -41,6 +41,11 @@ public class DefaultGroundable implements Groundable {
         return value.toString();
     }
 
+    @Override
+    public boolean preferLiteralDisplay() {
+        return this.value instanceof Number;
+    }
+
     public Object getValue() {
         return value;
     }
