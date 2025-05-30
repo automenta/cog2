@@ -4,6 +4,7 @@ import com.example.metta.atom.Atom;
 import com.example.metta.atom.ExpressionAtom;
 import com.example.metta.atom.MettaSymbols;
 import com.example.metta.atom.VariableAtom;
+import com.example.metta.interpreter.ForwardChainer;
 import com.example.metta.matcher.Matcher;
 import com.example.metta.types.Bindings;
 
@@ -13,18 +14,72 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.Collections; // Added for Collections.emptyList in narrowVariables
+import java.util.Queue;
+import java.util.LinkedList;
 
-public class GroundingSpace implements SpaceWriter {
+public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming SpaceReader is implemented or its methods are present
 
     private final Set<Atom> atoms;
+    private final ForwardChainer forwardChainer = new ForwardChainer();
+    private boolean enableForwardChaining = false;
 
     public GroundingSpace() {
         this.atoms = new HashSet<>();
     }
 
+    /**
+     * Enables or disables the automatic forward chaining mechanism.
+     * When enabled, adding facts to the space may trigger rules and derive new facts.
+     * @param enable true to enable forward chaining, false to disable.
+     */
+    public void setEnableForwardChaining(boolean enable) {
+        this.enableForwardChaining = enable;
+    }
+
     @Override
     public void add(Atom atom) {
-        this.atoms.add(atom);
+        // Add the initial atom to the main set of atoms.
+        // The boolean `isNewToSpace` indicates if this atom was actually new.
+        // This information isn't strictly used to decide IF chaining occurs,
+        // but it's often useful. Chaining will occur if enableForwardChaining is true,
+        // using 'atom' as the initial trigger.
+        boolean isNewToSpace = this.atoms.add(atom);
+
+        if (enableForwardChaining) {
+            Queue<Atom> processingQueue = new LinkedList<>();
+            // Offer the atom that was just 'added'. It's the primary trigger for this cycle.
+            processingQueue.offer(atom);
+
+            // This set tracks atoms that have been added to the queue during this specific
+            // invocation of add(), to prevent redundant processing within the same cascade.
+            Set<Atom> atomsQueuedForThisCascade = new HashSet<>();
+            atomsQueuedForThisCascade.add(atom);
+
+            while (!processingQueue.isEmpty()) {
+                Atom currentFactToProcess = processingQueue.poll();
+
+                // Create a snapshot of all atoms currently in the space.
+                // This ensures the chainer sees a consistent state for its reasoning step.
+                Set<Atom> allAtomsSnapshot = new HashSet<>(this.atoms);
+
+                // The forwardChainer's trigger method uses currentFactToProcess as the 'new fact'
+                // (the one that potentially completes a rule) and allAtomsSnapshot as the
+                // context of all other existing facts.
+                Set<Atom> newlyDerivedConclusions = forwardChainer.trigger(this, currentFactToProcess, allAtomsSnapshot);
+
+                for (Atom conclusion : newlyDerivedConclusions) {
+                    // `newlyDerivedConclusions` are already confirmed by `trigger`
+                    // not to be in `allAtomsSnapshot` that was passed to it (meaning they are new relative to that snapshot).
+                    // Now, we add it to the main `this.atoms` set in GroundingSpace.
+                    if (this.atoms.add(conclusion)) { // If truly new to the main atom set
+                        // And if we haven't already queued it up during this current `add` cascade
+                        if (atomsQueuedForThisCascade.add(conclusion)) {
+                            processingQueue.offer(conclusion);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Override

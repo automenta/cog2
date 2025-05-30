@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
+import java.util.Collections;
 
 public class MatcherTest {
 
@@ -17,6 +18,7 @@ public class MatcherTest {
     private final SymbolAtom b = new SymbolAtom("B");
     private final SymbolAtom f = new SymbolAtom("f");
     private final SymbolAtom g = new SymbolAtom("g");
+    private final SymbolAtom h = new SymbolAtom("h");
 
     @Test
     void symbolVsSymbol() {
@@ -128,13 +130,13 @@ public class MatcherTest {
         // Expected: $g=h, $y=B
         VariableAtom gVar = new VariableAtom("g");
         ExpressionAtom pattern = new ExpressionAtom(List.of(f, new ExpressionAtom(List.of(gVar, a)), y));
-        ExpressionAtom target  = new ExpressionAtom(List.of(f, new ExpressionAtom(List.of(h, a)), b));
-        SymbolAtom h_sym = new SymbolAtom("h");
+        ExpressionAtom target  = new ExpressionAtom(List.of(f, new ExpressionAtom(List.of(this.h, a)), b));
+        // SymbolAtom h_sym = new SymbolAtom("h"); // Removed local variable
 
         List<Bindings> result = Matcher.matchAtoms(pattern, target);
         assertEquals(1, result.size());
         Bindings bnd = result.get(0);
-        assertEquals(h_sym, bnd.resolve(gVar));
+        assertEquals(this.h, bnd.resolve(gVar)); // Use field this.h
         assertEquals(b, bnd.resolve(y));
     }
 
@@ -194,7 +196,7 @@ public class MatcherTest {
             if (patternToMatch.equals(other)) { // Simple equality check for the demo
                 return matchResultsToReturn;
             }
-            return Collections.emptyList();
+            return java.util.Collections.emptyList(); // Fully qualified because import is at top-level of MatcherTest.java
         }
     }
 
@@ -203,7 +205,7 @@ public class MatcherTest {
         // Pattern is a GroundedAtom with custom match logic
         Bindings customBinding = new Bindings();
         customBinding.addValueBinding(x, b); // $x = B
-        CustomMatchGroundable cmg = new CustomMatchGroundable(a, Collections.singletonList(customBinding)); // This will match 'A' and return $x=B
+        CustomMatchGroundable cmg = new CustomMatchGroundable(a, java.util.Collections.singletonList(customBinding)); // This will match 'A' and return $x=B
         GroundedAtom patternGrounded = new GroundedAtom(cmg); // Wrap the Groundable logic
 
         // Target is 'A'
@@ -221,7 +223,7 @@ public class MatcherTest {
         // Target is a GroundedAtom with custom match logic
         Bindings customBinding = new Bindings();
         customBinding.addValueBinding(y, a); // $y = A
-        CustomMatchGroundable cmgTarget = new CustomMatchGroundable(b, Collections.singletonList(customBinding)); // This will match 'B' and return $y=A
+        CustomMatchGroundable cmgTarget = new CustomMatchGroundable(b, java.util.Collections.singletonList(customBinding)); // This will match 'B' and return $y=A
         GroundedAtom targetGrounded = new GroundedAtom(cmgTarget);
 
         // Pattern is 'B'
@@ -236,7 +238,7 @@ public class MatcherTest {
     
     @Test
     void matchWithEmptyExpression() {
-        ExpressionAtom emptyExpr = new ExpressionAtom(Collections.emptyList());
+        ExpressionAtom emptyExpr = new ExpressionAtom(java.util.Collections.emptyList());
         List<Bindings> result = Matcher.matchAtoms(emptyExpr, emptyExpr);
         assertEquals(1, result.size());
         assertTrue(result.get(0).isEmpty());

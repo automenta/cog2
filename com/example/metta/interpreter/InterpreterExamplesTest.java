@@ -1,6 +1,7 @@
 package com.example.metta.interpreter;
 
 import com.example.metta.atom.Atom;
+import com.example.metta.atom.ExpressionAtom; // Explicit import
 import com.example.metta.space.GroundingSpace;
 import static com.example.metta.testing.MettaTestUtils.*; // atom(), interpret(), createSpace(), interpretToStr()
 

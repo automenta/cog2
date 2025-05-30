@@ -43,6 +43,12 @@ public final class MettaSymbols {
     public static final Atom EVAL_SYMBOL = new SymbolAtom("eval");
     /** Symbol representing a chained evaluation or sequence of operations. */
     public static final Atom CHAIN_SYMBOL = new SymbolAtom("chain");
+
+    /** Symbol used to define an implication rule (e.g., (=> (And (premise1) (premise2)) (conclusion))). */
+    public static final Atom IMPLIES_SYMBOL = new SymbolAtom("=>");
+
+    /** Symbol used to represent a conjunction of conditions in a rule or query. */
+    public static final Atom AND_SYMBOL = new SymbolAtom("And");
     /** Symbol representing the unification operation. */
     public static final Atom UNIFY_SYMBOL = new SymbolAtom("unify");
     /** Symbol representing a deconstruction operation on expressions. */

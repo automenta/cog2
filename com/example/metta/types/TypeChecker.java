@@ -3,6 +3,7 @@ package com.example.metta.types;
 import com.example.metta.atom.*;
 import com.example.metta.matcher.Matcher;
 import com.example.metta.space.SpaceReader;
+import com.example.metta.space.WrappedSpaceAtom; // Added import
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,6 +13,8 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.Objects; // Added for Objects.requireNonNull
+import java.util.Map;
+import java.util.HashMap;
 
 public class TypeChecker {
 
