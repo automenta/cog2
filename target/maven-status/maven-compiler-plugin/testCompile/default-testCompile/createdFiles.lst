@@ -1,0 +1,6 @@
+org/opencog/hyperon/atoms/GroundedAtomTest$TestOperation.class
+org/opencog/hyperon/atoms/GroundedAtomTest$AnotherTestOperation.class
+org/opencog/hyperon/space/AtomSpaceTest.class
+org/opencog/hyperon/space/BindingsTest.class
+org/opencog/hyperon/atoms/GroundedAtomTest.class
+org/opencog/hyperon/metta/parser/MettaParserTest.class

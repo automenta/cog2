@@ -1,0 +1,11 @@
+org/opencog/hyperon/metta/parser/MettaParser.class
+org/opencog/hyperon/space/AtomSpace.class
+org/opencog/hyperon/atoms/ExpressionAtom.class
+org/opencog/hyperon/metta/parser/MettaParser$MettaParserException.class
+org/opencog/hyperon/atoms/SymbolAtom.class
+org/opencog/hyperon/space/Bindings.class
+org/opencog/hyperon/atoms/Atom$AtomType.class
+org/opencog/hyperon/atoms/Groundable.class
+org/opencog/hyperon/atoms/Atom.class
+org/opencog/hyperon/atoms/GroundedAtom.class
+org/opencog/hyperon/atoms/VariableAtom.class

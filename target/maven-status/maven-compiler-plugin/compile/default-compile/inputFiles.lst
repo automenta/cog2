@@ -1,0 +1,9 @@
+/app/src/main/java/org/opencog/hyperon/atoms/ExpressionAtom.java
+/app/src/main/java/org/opencog/hyperon/atoms/Atom.java
+/app/src/main/java/org/opencog/hyperon/metta/parser/MettaParser.java
+/app/src/main/java/org/opencog/hyperon/atoms/Groundable.java
+/app/src/main/java/org/opencog/hyperon/atoms/GroundedAtom.java
+/app/src/main/java/org/opencog/hyperon/space/Bindings.java
+/app/src/main/java/org/opencog/hyperon/space/AtomSpace.java
+/app/src/main/java/org/opencog/hyperon/atoms/SymbolAtom.java
+/app/src/main/java/org/opencog/hyperon/atoms/VariableAtom.java

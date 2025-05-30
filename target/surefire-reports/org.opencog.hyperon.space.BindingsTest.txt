@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: org.opencog.hyperon.space.BindingsTest
+-------------------------------------------------------------------------------
+Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.068 s - in org.opencog.hyperon.space.BindingsTest

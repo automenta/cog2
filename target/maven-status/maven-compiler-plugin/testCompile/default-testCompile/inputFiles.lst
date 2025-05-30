@@ -1,0 +1,4 @@
+/app/src/test/java/org/opencog/hyperon/space/AtomSpaceTest.java
+/app/src/test/java/org/opencog/hyperon/metta/parser/MettaParserTest.java
+/app/src/test/java/org/opencog/hyperon/space/BindingsTest.java
+/app/src/test/java/org/opencog/hyperon/atoms/GroundedAtomTest.java
