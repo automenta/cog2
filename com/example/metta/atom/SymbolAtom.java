@@ -2,6 +2,11 @@ package com.example.metta.atom;
 
 import java.util.Objects;
 
+/**
+ * Represents a symbolic atom, a unique constant identifier.
+ * Symbols are fundamental building blocks in Metta expressions, analogous to
+ * symbols in Lisp or atoms in Prolog. They are immutable.
+ */
 public final class SymbolAtom extends AbstractAtom {
     private final String name;
 
@@ -9,6 +14,10 @@ public final class SymbolAtom extends AbstractAtom {
         this.name = Objects.requireNonNull(name, "name cannot be null");
     }
 
+    /**
+     * Gets the name of this symbol.
+     * @return The non-null name of the symbol.
+     */
     public String getName() {
         return name;
     }

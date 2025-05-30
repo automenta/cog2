@@ -2,10 +2,16 @@ package com.example.metta.atom;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.ArrayList;
-import java.util.Collections;
+// Unused: import java.util.ArrayList;
+// Unused: import java.util.Collections;
 import java.util.stream.Collectors;
 
+/**
+ * Represents an expression atom, which is an ordered sequence of other atoms.
+ * Expressions are used to form complex structures, function calls, or nested statements
+ * in Metta. They are immutable. For example, {@code (f a b)} represents an
+ * expression where {@code f}, {@code a}, and {@code b} are child atoms.
+ */
 public final class ExpressionAtom extends AbstractAtom {
     private final List<Atom> children;
 
@@ -14,6 +20,11 @@ public final class ExpressionAtom extends AbstractAtom {
         this.children = List.copyOf(children); // Java 10+ style defensive copy
     }
 
+    /**
+     * Gets the children of this expression.
+     * The returned list is unmodifiable.
+     * @return An unmodifiable {@link List} of {@link Atom}s representing the children.
+     */
     public List<Atom> getChildren() {
         return children; // Already unmodifiable from List.copyOf()
     }
