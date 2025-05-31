@@ -124,6 +124,15 @@ public class SExprParser {
             case CLOSE_PAREN:
                 throw new SExprParserException("Unexpected ')'");
             case SYMBOL:
+                // Check for known operational symbols first
+                if (token.value.equals("+")) {
+                    return new AddAtom();
+                } else if (token.value.equals("-")) {
+                    return new SubtractAtom();
+                } else if (token.value.equals("*")) {
+                    return new MultiplyAtom();
+                }
+                // Default to SymbolAtom if not a special operational symbol
                 return new SymbolAtom(token.value);
             case VARIABLE:
                 return new VariableAtom(token.value);
