@@ -124,6 +124,17 @@ public class Interpreter {
                  frame.setCurrentAtom(error);
                  frame.setFinished(true);
                  return Collections.singletonList(new Pair<>(frame, bindings));
+            } else if (operator.equals(MettaSymbols.OR_SYMBOL)) {
+                return handleOr(context, frame, bindings, expr.getChildren().subList(1, expr.getChildren().size()));
+            } else if (operator.equals(MettaSymbols.NOT_SYMBOL)) {
+                if (expr.getChildren().size() == 2) { // Expecting (not <atom>)
+                    return handleNot(context, frame, bindings, expr.getChildren().get(1));
+                } else {
+                    Atom error = new ExpressionAtom(List.of(MettaSymbols.ERROR_SYMBOL, new SymbolAtom("IncorrectArgumentsNot"), expr));
+                    frame.setCurrentAtom(error);
+                    frame.setFinished(true);
+                    return Collections.singletonList(new Pair<>(frame, bindings));
+                }
             } else { 
                 return handleEval(context, frame, bindings, true); // Implicit eval for other expressions
             }
@@ -132,6 +143,112 @@ public class Interpreter {
         }
     }
     
+    private static List<Pair<StackFrame, Bindings>> handleOr(
+            InterpreterContext context, StackFrame currentOrFrame, Bindings currentBindings, List<Atom> disjuncts) {
+
+        if (disjuncts.isEmpty()) { // (or) -> False (convention)
+            currentOrFrame.setCurrentAtom(MettaSymbols.FALSE_SYMBOL);
+            currentOrFrame.setFinished(true);
+            return Collections.singletonList(new Pair<>(currentOrFrame, currentBindings));
+        }
+
+        OrReturnHandler orReturnHandler = new OrReturnHandler(disjuncts, 0, currentOrFrame, currentBindings);
+        Atom firstDisjunct = disjuncts.get(0);
+
+        StackFrame disjunctEvalFrame = new StackFrame(
+            currentOrFrame,                 // Parent frame that will be resumed by the handler
+            firstDisjunct,                  // Atom to evaluate
+            orReturnHandler,                // Handler to process the result of this disjunct
+            currentOrFrame.getDepth() + 1   // Increment depth for the sub-evaluation
+        );
+
+        return Collections.singletonList(new Pair<>(disjunctEvalFrame, currentBindings.copy()));
+    }
+
+    private static class OrReturnHandler implements ReturnHandler {
+        private final List<Atom> disjuncts;
+        private int currentIndex;
+        private final StackFrame orFrame;
+        private final Bindings initialBindingsForOr;
+
+        public OrReturnHandler(List<Atom> disjuncts, int currentIndex, StackFrame orFrame, Bindings initialBindingsForOr) {
+            this.disjuncts = disjuncts;
+            this.currentIndex = currentIndex;
+            this.orFrame = orFrame;
+            this.initialBindingsForOr = initialBindingsForOr;
+        }
+
+        @Override
+        public Optional<Pair<StackFrame, Bindings>> apply(StackFrame disjunctFrameHost, Atom evaluatedDisjunctResult, Bindings bindingsAfterDisjunctEval) {
+            boolean isTrueIsh = !evaluatedDisjunctResult.equals(MettaSymbols.FALSE_SYMBOL) &&
+                                !evaluatedDisjunctResult.equals(MettaSymbols.UNIT_TYPE) &&
+                                !(evaluatedDisjunctResult instanceof ExpressionAtom &&
+                                  !((ExpressionAtom)evaluatedDisjunctResult).getChildren().isEmpty() &&
+                                  ((ExpressionAtom)evaluatedDisjunctResult).getChildren().get(0).equals(MettaSymbols.ERROR_SYMBOL));
+
+            if (isTrueIsh) {
+                orFrame.setCurrentAtom(evaluatedDisjunctResult);
+                orFrame.setFinished(true);
+                return Optional.of(new Pair<>(orFrame, bindingsAfterDisjunctEval));
+            } else {
+                this.currentIndex++;
+                if (this.currentIndex < disjuncts.size()) {
+                    Atom nextDisjunct = disjuncts.get(this.currentIndex);
+                    StackFrame nextDisjunctEvalFrame = new StackFrame(
+                        orFrame,
+                        nextDisjunct,
+                        this,
+                        orFrame.getDepth() + 1
+                    );
+                    return Optional.of(new Pair<>(nextDisjunctEvalFrame, this.initialBindingsForOr.copy()));
+                } else {
+                    orFrame.setCurrentAtom(MettaSymbols.FALSE_SYMBOL);
+                    orFrame.setFinished(true);
+                    return Optional.of(new Pair<>(orFrame, this.initialBindingsForOr));
+                }
+            }
+        }
+    }
+
+    private static List<Pair<StackFrame, Bindings>> handleNot(
+            InterpreterContext context, StackFrame currentNotFrame, Bindings currentBindings, Atom operand) {
+
+        NotReturnHandler notReturnHandler = new NotReturnHandler(currentNotFrame);
+
+        StackFrame operandEvalFrame = new StackFrame(
+            currentNotFrame,                // Parent frame
+            operand,                        // Atom to evaluate
+            notReturnHandler,               // Handler for the result
+            currentNotFrame.getDepth() + 1  // Increment depth
+        );
+        return Collections.singletonList(new Pair<>(operandEvalFrame, currentBindings.copy()));
+    }
+
+    private static class NotReturnHandler implements ReturnHandler {
+        private final StackFrame notFrame;
+
+        public NotReturnHandler(StackFrame notFrame) {
+            this.notFrame = notFrame;
+        }
+
+        @Override
+        public Optional<Pair<StackFrame, Bindings>> apply(StackFrame operandFrameHost, Atom evaluatedOperandResult, Bindings bindingsAfterOperandEval) {
+            boolean isTrueIsh = !evaluatedOperandResult.equals(MettaSymbols.FALSE_SYMBOL) &&
+                                !evaluatedOperandResult.equals(MettaSymbols.UNIT_TYPE) &&
+                                !(evaluatedOperandResult instanceof ExpressionAtom &&
+                                  !((ExpressionAtom)evaluatedOperandResult).getChildren().isEmpty() &&
+                                  ((ExpressionAtom)evaluatedOperandResult).getChildren().get(0).equals(MettaSymbols.ERROR_SYMBOL));
+
+            if (isTrueIsh) {
+                notFrame.setCurrentAtom(MettaSymbols.FALSE_SYMBOL);
+            } else {
+                notFrame.setCurrentAtom(MettaSymbols.TRUE_SYMBOL);
+            }
+            notFrame.setFinished(true);
+            return Optional.of(new Pair<>(notFrame, bindingsAfterOperandEval));
+        }
+    }
+
     private static List<Pair<StackFrame, Bindings>> handleEval(InterpreterContext context, StackFrame currentFrame, Bindings currentBindings, boolean isImplicit) {
         Atom atomToEvaluate = currentFrame.getCurrentAtom(); 
         

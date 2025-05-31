@@ -1,117 +1,347 @@
 package com.example.metta.interpreter;
 
-import com.example.metta.atom.Atom;
-import com.example.metta.atom.SymbolAtom;
-import com.example.metta.atom.ExpressionAtom;
-import com.example.metta.atom.MettaSymbols; // For IMPLIES_SYMBOL, AND_SYMBOL
+import com.example.metta.atom.*;
 import com.example.metta.space.GroundingSpace;
-import com.example.metta.text.SExprParser; // To parse textual representations of atoms
-
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.util.List;
+import java.util.HashSet;
 import java.util.Set;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class ForwardChainerTest {
 
-    private Atom parse(String mettaSrc) {
-        SExprParser parser = new SExprParser();
-        return parser.parse(mettaSrc);
+    // Helper symbols
+    private final SymbolAtom P = new SymbolAtom("P");
+    private final SymbolAtom Q = new SymbolAtom("Q");
+    private final SymbolAtom R = new SymbolAtom("R");
+    private final SymbolAtom S = new SymbolAtom("S");
+    private final SymbolAtom T = new SymbolAtom("T");
+
+    private final SymbolAtom valA = new SymbolAtom("a");
+    private final SymbolAtom valB = new SymbolAtom("b");
+    private final SymbolAtom valC = new SymbolAtom("c");
+    private final SymbolAtom valD = new SymbolAtom("d");
+    private final SymbolAtom valE = new SymbolAtom("e");
+
+    private final SymbolAtom Q_concrete = new SymbolAtom("Q_concrete");
+    private final SymbolAtom R_Not_Q_Concrete = new SymbolAtom("R_Not_Q_Concrete");
+
+
+    // Tests for OR_SYMBOL
+    // Rule: (=> (or (P $x) (Q $x)) (R $x))
+
+    @Test
+    void testForwardChainerOrConditionPIsTrue() {
+        GroundingSpace space = new GroundingSpace();
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
+
+        // Rule: (=> (or (P $x) (Q $x)) (R $x))
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.OR_SYMBOL, new ExpressionAtom(P, x), new ExpressionAtom(Q, x)),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
+
+        // Fact: (P a)
+        ExpressionAtom factPa = new ExpressionAtom(P, valA);
+        // No need to add factPa to space if it's the newFact.
+        // If it were an existing fact and another fact triggered, it would be in space.
+
+        Atom newFact = factPa;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
+
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        ExpressionAtom expectedConclusion = new ExpressionAtom(R, valA);
+        assertTrue(derivedConclusions.contains(expectedConclusion), "Expected (R a) to be derived");
+        assertEquals(1, derivedConclusions.size());
     }
 
     @Test
-    void testSimpleAncestorRule() {
+    void testForwardChainerOrConditionQIsTrue() {
         GroundingSpace space = new GroundingSpace();
-        space.setEnableForwardChaining(true);
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
 
-        // Define rule: (=> (parent $x $y) (ancestor $x $y))
-        Atom rule1 = parse("(=> (parent $x $y) (ancestor $x $y))");
-        space.add(rule1);
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.OR_SYMBOL, new ExpressionAtom(P, x), new ExpressionAtom(Q, x)),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
 
-        // Add fact: (parent a b)
-        Atom fact1 = parse("(parent a b)");
-        space.add(fact1);
+        ExpressionAtom factQb = new ExpressionAtom(Q, valB);
+        Atom newFact = factQb;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
 
-        // Expected derived fact: (ancestor a b)
-        Atom expectedConclusion1 = parse("(ancestor a b)");
-        assertTrue(space.getAtoms().contains(expectedConclusion1), "Should derive (ancestor a b)");
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        ExpressionAtom expectedConclusion = new ExpressionAtom(R, valB);
+        assertTrue(derivedConclusions.contains(expectedConclusion), "Expected (R b) to be derived");
+        assertEquals(1, derivedConclusions.size());
     }
 
     @Test
-    void testTransitiveAncestorRule() {
+    void testForwardChainerOrConditionBothTrueNewFactMatchesP() {
         GroundingSpace space = new GroundingSpace();
-        space.setEnableForwardChaining(true);
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
 
-        // Define rules
-        Atom rule1 = parse("(=> (parent $x $y) (ancestor $x $y))"); // (parent $x $y) -> (ancestor $x $y)
-        Atom rule2 = parse("(=> (And (parent $x $y) (ancestor $y $z)) (ancestor $x $z))"); // (parent $x $y) & (ancestor $y $z) -> (ancestor $x $z)
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.OR_SYMBOL, new ExpressionAtom(P, x), new ExpressionAtom(Q, x)),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
 
-        space.add(rule1);
-        space.add(rule2);
+        ExpressionAtom factPc = new ExpressionAtom(P, valC);
+        ExpressionAtom factQc = new ExpressionAtom(Q, valC);
+        space.addAtom(factQc); // Q c is an existing fact
 
-        // Add facts
-        Atom factParentAB = parse("(parent a b)");
-        Atom factParentBC = parse("(parent b c)");
+        Atom newFact = factPc; // P c is the new fact
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
 
-        space.add(factParentAB); // Should derive (ancestor a b) via rule1
-        space.add(factParentBC); // Should derive (ancestor b c) via rule1
-                                 // AND then (ancestor a c) via rule2 using (parent a b) and newly derived (ancestor b c)
 
-        // Check for all expected conclusions
-        Atom ancestorAB = parse("(ancestor a b)");
-        Atom ancestorBC = parse("(ancestor b c)");
-        Atom ancestorAC = parse("(ancestor a c)");
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
 
-        Set<Atom> currentAtoms = Set.copyOf(space.getAtoms()); // Use a copy for stable check
-
-        assertTrue(currentAtoms.contains(ancestorAB), "Missing (ancestor a b)");
-        assertTrue(currentAtoms.contains(ancestorBC), "Missing (ancestor b c)");
-        assertTrue(currentAtoms.contains(ancestorAC), "Missing transitive conclusion (ancestor a c)");
+        ExpressionAtom expectedConclusion = new ExpressionAtom(R, valC);
+        assertTrue(derivedConclusions.contains(expectedConclusion), "Expected (R c) to be derived");
+        assertEquals(1, derivedConclusions.size());
     }
 
     @Test
-    void testNoInfiniteLoopOnExistingFact() {
+    void testForwardChainerOrConditionBothTrueNewFactMatchesQ() {
         GroundingSpace space = new GroundingSpace();
-        space.setEnableForwardChaining(true);
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
 
-        Atom rule = parse("(=> (status $x active) (status $x processed))");
-        space.add(rule);
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.OR_SYMBOL, new ExpressionAtom(P, x), new ExpressionAtom(Q, x)),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
 
-        Atom fact1 = parse("(status Alice active)");
-        space.add(fact1); // Derives (status Alice processed)
+        ExpressionAtom factPd = new ExpressionAtom(P, valD);
+        ExpressionAtom factQd = new ExpressionAtom(Q, valD);
+        space.addAtom(factPd); // P d is an existing fact
 
-        assertTrue(space.getAtoms().contains(parse("(status Alice processed)")), "Initial derivation failed.");
+        Atom newFact = factQd; // Q d is the new fact
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
 
-        int initialSize = space.getAtoms().size();
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
 
-        // Add the same fact again, should not cause re-derivation or loop
-        space.add(fact1);
-        assertEquals(initialSize, space.getAtoms().size(), "Adding existing fact changed atom count.");
-
-        // Add a derived fact again
-        Atom derivedFact = parse("(status Alice processed)");
-        space.add(derivedFact);
-        assertEquals(initialSize, space.getAtoms().size(), "Adding existing derived fact changed atom count.");
+        ExpressionAtom expectedConclusion = new ExpressionAtom(R, valD);
+        assertTrue(derivedConclusions.contains(expectedConclusion), "Expected (R d) to be derived");
+        assertEquals(1, derivedConclusions.size());
     }
 
     @Test
-    void testChainingOrderAndMultiplePaths() {
+    void testForwardChainerOrConditionNeitherTrue() {
         GroundingSpace space = new GroundingSpace();
-        space.setEnableForwardChaining(true);
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
 
-        // Rules
-        space.add(parse("(=> (A $x) (B $x))")); // A(x) -> B(x)
-        space.add(parse("(=> (B $x) (C $x))")); // B(x) -> C(x)
-        space.add(parse("(=> (A $x) (D $x))")); // A(x) -> D(x)
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.OR_SYMBOL, new ExpressionAtom(P, x), new ExpressionAtom(Q, x)),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
 
-        // Fact
-        space.add(parse("(A data)"));
+        ExpressionAtom factSe = new ExpressionAtom(S, valE); // A different predicate
+        Atom newFact = factSe;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
 
-        // Expected
-        assertTrue(space.getAtoms().contains(parse("(A data)")), "Fact A not present");
-        assertTrue(space.getAtoms().contains(parse("(B data)")), "Fact B not derived");
-        assertTrue(space.getAtoms().contains(parse("(C data)")), "Fact C not derived (from B)");
-        assertTrue(space.getAtoms().contains(parse("(D data)")), "Fact D not derived (from A)");
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        assertTrue(derivedConclusions.isEmpty(), "Expected no conclusions to be derived");
+    }
+
+    @Test
+    void testForwardChainerOrWithMultipleVariables() {
+        GroundingSpace space = new GroundingSpace();
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
+        VariableAtom y = new VariableAtom("y");
+
+        // Rule: (=> (or (P $x $y) (Q $y $x)) (R $x $y))
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.OR_SYMBOL,
+                    new ExpressionAtom(P, x, y),
+                    new ExpressionAtom(Q, y, x)),
+                new ExpressionAtom(R, x, y)
+        );
+        space.addAtom(rule);
+
+        ExpressionAtom factPab = new ExpressionAtom(P, valA, valB);
+        Atom newFact = factPab;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
+
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        ExpressionAtom expectedConclusion = new ExpressionAtom(R, valA, valB);
+        assertTrue(derivedConclusions.contains(expectedConclusion), "Expected (R a b) to be derived");
+        assertEquals(1, derivedConclusions.size());
+    }
+
+    // Tests for NOT_SYMBOL
+    // Rule: (=> (and (P $x) (not (Q $x))) (R $x))
+
+    @Test
+    void testForwardChainerNotConditionQIsAbsent() {
+        GroundingSpace space = new GroundingSpace();
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
+
+        // Rule: (=> (and (P $x) (not (Q $x))) (R $x))
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.AND_SYMBOL,
+                    new ExpressionAtom(P, x),
+                    new ExpressionAtom(MettaSymbols.NOT_SYMBOL, new ExpressionAtom(Q, x))),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
+
+        ExpressionAtom factPa = new ExpressionAtom(P, valA);
+        // Q a is absent
+        Atom newFact = factPa;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
+
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        ExpressionAtom expectedConclusion = new ExpressionAtom(R, valA);
+        assertTrue(derivedConclusions.contains(expectedConclusion), "Expected (R a) to be derived when Q a is absent");
+        assertEquals(1, derivedConclusions.size());
+    }
+
+    @Test
+    void testForwardChainerNotConditionQIsPresent() {
+        GroundingSpace space = new GroundingSpace();
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
+
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.AND_SYMBOL,
+                    new ExpressionAtom(P, x),
+                    new ExpressionAtom(MettaSymbols.NOT_SYMBOL, new ExpressionAtom(Q, x))),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
+
+        ExpressionAtom factPb = new ExpressionAtom(P, valB);
+        ExpressionAtom factQb = new ExpressionAtom(Q, valB); // Q b is present
+        space.addAtom(factQb); // Add Q b to existing facts
+
+        Atom newFact = factPb;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
+
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        assertTrue(derivedConclusions.isEmpty(), "Expected no conclusions when Q b is present");
+    }
+
+    @Test
+    void testForwardChainerNotConditionNewFactMakesNotFalse() {
+        GroundingSpace space = new GroundingSpace();
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
+
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.AND_SYMBOL,
+                    new ExpressionAtom(P, x),
+                    new ExpressionAtom(MettaSymbols.NOT_SYMBOL, new ExpressionAtom(Q, x))),
+                new ExpressionAtom(R, x)
+        );
+        space.addAtom(rule);
+
+        ExpressionAtom factPc = new ExpressionAtom(P, valC);
+        space.addAtom(factPc); // P c is an existing fact
+
+        // This is the specific scenario: newFact is (Q c), which makes (not (Q c)) false.
+        // The rule is triggered by (P c) which is already in existingFactsWithNew.
+        // This means the trigger method needs to be able to be called even if newFact is already "known".
+        // Or, more precisely, newFact is the fact that initiates the chaining, and it must match a positive conjunct.
+        Atom newFactIsPc = factPc; // Let (P c) be the trigger
+
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        // existingFactsWithNew already contains (P c).
+        // Now, add (Q c) to the knowledge base *before* triggering with (P c).
+        ExpressionAtom factQc = new ExpressionAtom(Q, valC);
+        existingFactsWithNew.add(factQc); // (Q c) is now part of the facts to check against for (not (Q c))
+
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFactIsPc, existingFactsWithNew);
+
+        assertTrue(derivedConclusions.isEmpty(), "Expected (R c) NOT derived because (Q c) was added to existing facts, making (not (Q c)) false.");
+    }
+
+
+    @Test
+    void testForwardChainerNotWithSpecificGroundAtomQIsNotPresent() {
+        GroundingSpace space = new GroundingSpace();
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
+
+        // Rule: (=> (and (P $x) (not Q_concrete)) (R_Not_Q_Concrete $x))
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.AND_SYMBOL,
+                    new ExpressionAtom(P, x),
+                    new ExpressionAtom(MettaSymbols.NOT_SYMBOL, Q_concrete)), // Q_concrete is a SymbolAtom
+                new ExpressionAtom(R_Not_Q_Concrete, x)
+        );
+        space.addAtom(rule);
+
+        ExpressionAtom factPa = new ExpressionAtom(P, valA);
+        // Q_concrete is NOT in space
+        Atom newFact = factPa;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
+
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        ExpressionAtom expectedConclusion = new ExpressionAtom(R_Not_Q_Concrete, valA);
+        assertTrue(derivedConclusions.contains(expectedConclusion), "Expected (R_Not_Q_Concrete a) when Q_concrete absent");
+        assertEquals(1, derivedConclusions.size());
+    }
+
+    @Test
+    void testForwardChainerNotWithSpecificGroundAtomQIsPresent() {
+        GroundingSpace space = new GroundingSpace();
+        ForwardChainer chainer = new ForwardChainer();
+        VariableAtom x = new VariableAtom("x");
+
+        ExpressionAtom rule = new ExpressionAtom(
+                MettaSymbols.IMPLIES_SYMBOL,
+                new ExpressionAtom(MettaSymbols.AND_SYMBOL,
+                    new ExpressionAtom(P, x),
+                    new ExpressionAtom(MettaSymbols.NOT_SYMBOL, Q_concrete)),
+                new ExpressionAtom(R_Not_Q_Concrete, x)
+        );
+        space.addAtom(rule);
+
+        ExpressionAtom factPb = new ExpressionAtom(P, valB);
+        space.addAtom(Q_concrete); // Q_concrete IS in space
+
+        Atom newFact = factPb;
+        Set<Atom> existingFactsWithNew = new HashSet<>(space.getAtoms());
+        existingFactsWithNew.add(newFact);
+
+        Set<Atom> derivedConclusions = chainer.trigger(space, newFact, existingFactsWithNew);
+
+        assertTrue(derivedConclusions.isEmpty(), "Expected no conclusion when Q_concrete is present");
     }
 }

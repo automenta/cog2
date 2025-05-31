@@ -61,7 +61,15 @@ public final class MettaSymbols {
     public static final Atom IMPLIES_SYMBOL = new SymbolAtom("=>");
 
     /** Symbol used to represent a conjunction of conditions in a rule or query. */
-    public static final Atom AND_SYMBOL = new SymbolAtom("And");
+    public static final SymbolAtom AND_SYMBOL = new SymbolAtom("and");
+    /** Symbol used to represent a disjunction of conditions in a rule or query. */
+    public static final SymbolAtom OR_SYMBOL = new SymbolAtom("or");
+    /** Symbol used to represent logical negation. */
+    public static final SymbolAtom NOT_SYMBOL = new SymbolAtom("not");
+    /** Symbol representing the boolean value True. */
+    public static final SymbolAtom TRUE_SYMBOL = new SymbolAtom("True");
+    /** Symbol representing the boolean value False. */
+    public static final SymbolAtom FALSE_SYMBOL = new SymbolAtom("False");
     /** Symbol representing the unification operation. */
     public static final Atom UNIFY_SYMBOL = new SymbolAtom("unify");
     /** Symbol representing a deconstruction operation on expressions. */
