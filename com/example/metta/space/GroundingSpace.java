@@ -247,6 +247,63 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
             .collect(Collectors.toList());
     }
 
+    public List<Bindings> queryPathStarWithDepth(Atom queryAtom, int maxDepth) {
+        if (!(queryAtom instanceof ExpressionAtom)) {
+            System.err.println("Error: queryPathStarWithDepth expects an ExpressionAtom. Got: " + queryAtom);
+            return Collections.emptyList();
+        }
+        ExpressionAtom mainQueryExpr = (ExpressionAtom) queryAtom;
+
+        if (mainQueryExpr.getChildren().isEmpty() || !mainQueryExpr.getChildren().get(0).equals(MettaSymbols.TRAVERSE_SYMBOL)) {
+            System.err.println("Error: queryPathStarWithDepth query must start with Traverse symbol. Got: " + mainQueryExpr);
+            return Collections.emptyList();
+        }
+
+        if (mainQueryExpr.getChildren().size() != 4) {
+            System.err.println("Error: queryPathStarWithDepth Traverse query expects 3 arguments (start, path, end). Got: " + (mainQueryExpr.getChildren().size() - 1));
+            return Collections.emptyList();
+        }
+
+        Atom startNodeConstraint = mainQueryExpr.getChildren().get(1);
+        Atom pathPatternAtom = mainQueryExpr.getChildren().get(2);
+        Atom endNodeConstraint = mainQueryExpr.getChildren().get(3);
+
+        if (!(pathPatternAtom instanceof ExpressionAtom)) {
+            System.err.println("Error: queryPathStarWithDepth path pattern must be an ExpressionAtom. Got: " + pathPatternAtom);
+            return Collections.emptyList();
+        }
+        ExpressionAtom pathStarExpression = (ExpressionAtom) pathPatternAtom;
+
+        if (pathStarExpression.getChildren().isEmpty() || !pathStarExpression.getChildren().get(0).equals(MettaSymbols.PATH_STAR_SYMBOL)) {
+            System.err.println("Error: queryPathStarWithDepth path pattern must start with PathStar symbol. Got: " + pathStarExpression);
+            return Collections.emptyList();
+        }
+
+        if (pathStarExpression.getChildren().size() != 2) {
+            System.err.println("Error: PathStar in queryPathStarWithDepth expects one argument (the link pattern). Got: " + pathStarExpression);
+            return Collections.emptyList();
+        }
+
+        Atom actualLinkPattern = pathStarExpression.getChildren().get(1);
+        if (!(actualLinkPattern instanceof ExpressionAtom)) {
+            System.err.println("Error: Link pattern inside PathStar for queryPathStarWithDepth must be an Expression. Got: " + actualLinkPattern);
+            return Collections.emptyList();
+        }
+
+        Set<VariableAtom> overallRelevantVars = getVariablesInPattern(mainQueryExpr);
+
+        // Call the parameterized executePathStarTraversal
+        List<Bindings> results = executePathStarTraversal(startNodeConstraint, (ExpressionAtom) actualLinkPattern, endNodeConstraint, overallRelevantVars, maxDepth);
+
+        // The main query() method applies narrowing, loop filtering, and distinct.
+        // To be consistent, let's apply them here as well.
+        return results.stream()
+                .map(b -> narrowVariables(b, overallRelevantVars))
+                .filter(b -> !b.hasLoop())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
     private List<Bindings> executeTraversalQuery(ExpressionAtom queryExpr) {
         if (queryExpr.getChildren().size() != 4) {
             System.err.println("Warning: Traverse query expects 3 arguments (start, path, end), but got: " + (queryExpr.getChildren().size() -1));
@@ -375,7 +432,7 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
                 return Collections.emptyList();
             }
             Set<VariableAtom> overallRelevantVars = getVariablesInPattern(queryExpr); // queryExpr is the full (traverse ...)
-            return executePathStarTraversal(startNodeConstraint, (ExpressionAtom) actualLinkPattern, endNodeConstraint, overallRelevantVars);
+            return executePathStarTraversal(startNodeConstraint, (ExpressionAtom) actualLinkPattern, endNodeConstraint, overallRelevantVars, MAX_PATH_STAR_DEPTH);
         } else if (pathPattern instanceof ExpressionAtom) {
             // Single link traversal
             ExpressionAtom singleLinkPatternExpr = (ExpressionAtom) pathPattern;
@@ -444,7 +501,8 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
         Atom startNodeConstraint,
         ExpressionAtom linkPattern, // This is the <actual_link_pattern> like (L $X $Y)
         Atom endNodeConstraint,
-        Set<VariableAtom> overallRelevantVars) {
+        Set<VariableAtom> overallRelevantVars,
+        int maxDepth) {
 
         List<Atom> linkPatternChildren = linkPattern.getChildren();
         if (linkPatternChildren.size() < 2) {
@@ -487,7 +545,7 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
             Bindings currentPathBindings = currentQueueEntry.getRight().getLeft();
             int currentDepth = currentQueueEntry.getRight().getRight();
 
-            if (currentDepth > MAX_PATH_STAR_DEPTH) {
+            if (currentDepth > maxDepth) {
                 continue;
             }
 
@@ -502,7 +560,7 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
                 }
             }
 
-            if (currentDepth == MAX_PATH_STAR_DEPTH) {
+            if (currentDepth == maxDepth) {
                 continue;
             }
 
