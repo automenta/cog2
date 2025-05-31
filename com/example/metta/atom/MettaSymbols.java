@@ -91,6 +91,8 @@ public final class MettaSymbols {
     public static final Atom TRAVERSE_SYMBOL = new SymbolAtom("Traverse");
     /** Symbol used within a Traverse query to specify a sequence of link patterns to be traversed. */
     public static final Atom PATH_SYMBOL = new SymbolAtom("Path");
+    /** Symbol used for graph traversal queries, representing a path of zero or more links of a certain type. */
+    public static final SymbolAtom PATH_STAR_SYMBOL = new SymbolAtom("PathStar");
 
     /** Symbol used for type annotation or declaration (e.g., (isa $x Type)). */
     public static final Atom COLON_SYMBOL = new SymbolAtom(":");

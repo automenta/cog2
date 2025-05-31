@@ -24,6 +24,7 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
     private final Set<Atom> atoms;
     private final ForwardChainer forwardChainer = new ForwardChainer();
     private boolean enableForwardChaining = false;
+    private static final int MAX_PATH_STAR_DEPTH = 10;
 
     public GroundingSpace() {
         this.atoms = new HashSet<>();
@@ -359,6 +360,22 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
                 }
             }
             return pathFinalResults.stream().distinct().collect(Collectors.toList()); // Return pathFinalResults here
+        } else if (pathPattern instanceof ExpressionAtom &&
+              !((ExpressionAtom) pathPattern).getChildren().isEmpty() &&
+              ((ExpressionAtom) pathPattern).getChildren().get(0).equals(MettaSymbols.PATH_STAR_SYMBOL)) {
+            // New PathStar logic
+            ExpressionAtom pathStarExpression = (ExpressionAtom) pathPattern; // pathPattern is (PathStar <actual_link_pattern>)
+            if (pathStarExpression.getChildren().size() != 2) {
+                System.err.println("Warning: PathStar expects one argument (the link pattern). Pattern: " + pathStarExpression);
+                return Collections.emptyList();
+            }
+            Atom actualLinkPattern = pathStarExpression.getChildren().get(1);
+            if (!(actualLinkPattern instanceof ExpressionAtom)) {
+                System.err.println("Warning: Link pattern inside PathStar must be an Expression. Pattern: " + actualLinkPattern);
+                return Collections.emptyList();
+            }
+            Set<VariableAtom> overallRelevantVars = getVariablesInPattern(queryExpr); // queryExpr is the full (traverse ...)
+            return executePathStarTraversal(startNodeConstraint, (ExpressionAtom) actualLinkPattern, endNodeConstraint, overallRelevantVars);
         } else if (pathPattern instanceof ExpressionAtom) {
             // Single link traversal
             ExpressionAtom singleLinkPatternExpr = (ExpressionAtom) pathPattern;
@@ -421,5 +438,118 @@ public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming Sp
             return Collections.emptyList();
         }
         return finalResults.stream().distinct().collect(Collectors.toList());
+    }
+
+    private List<Bindings> executePathStarTraversal(
+        Atom startNodeConstraint,
+        ExpressionAtom linkPattern, // This is the <actual_link_pattern> like (L $X $Y)
+        Atom endNodeConstraint,
+        Set<VariableAtom> overallRelevantVars) {
+
+        List<Atom> linkPatternChildren = linkPattern.getChildren();
+        if (linkPatternChildren.size() < 2) {
+            System.err.println("Warning: PathStar link pattern must have at least two children (e.g., Type FromVar ToVar). Pattern: " + linkPattern);
+            return Collections.emptyList();
+        }
+        Atom linkFromVarPlaceholder = linkPatternChildren.get(1);
+        Atom linkToVarPlaceholder = linkPatternChildren.get(linkPatternChildren.size() - 1);
+        if (!(linkFromVarPlaceholder instanceof VariableAtom) || !(linkToVarPlaceholder instanceof VariableAtom)) {
+            System.err.println("Warning: PathStar link pattern's assumed from/to placeholders (child 1 and last child) must be variables. Pattern: " + linkPattern);
+            return Collections.emptyList();
+        }
+
+        List<Bindings> finalResults = new ArrayList<>();
+        Queue<Pair<Atom, Pair<Bindings, Integer>>> queue = new LinkedList<>();
+        Set<Pair<Atom, Integer>> visitedWithDepth = new HashSet<>();
+
+        Atom resolvedStartNode = Matcher.applyBindings(startNodeConstraint, new Bindings());
+
+        if (resolvedStartNode instanceof VariableAtom) {
+            for (Atom potentialStartAtom : this.atoms) {
+                Bindings initialPathBindings = new Bindings();
+                if (initialPathBindings.addValueBinding((VariableAtom)resolvedStartNode, potentialStartAtom)) {
+                    if (!visitedWithDepth.contains(new Pair<>(potentialStartAtom, 0))) {
+                        queue.offer(new Pair<>(potentialStartAtom, new Pair<>(initialPathBindings, 0)));
+                        visitedWithDepth.add(new Pair<>(potentialStartAtom, 0));
+                    }
+                }
+            }
+        } else {
+            if (!visitedWithDepth.contains(new Pair<>(resolvedStartNode, 0))) {
+                queue.offer(new Pair<>(resolvedStartNode, new Pair<>(new Bindings(), 0)));
+                visitedWithDepth.add(new Pair<>(resolvedStartNode, 0));
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            Pair<Atom, Pair<Bindings, Integer>> currentQueueEntry = queue.poll();
+            Atom currentNode = currentQueueEntry.getLeft();
+            Bindings currentPathBindings = currentQueueEntry.getRight().getLeft();
+            int currentDepth = currentQueueEntry.getRight().getRight();
+
+            if (currentDepth > MAX_PATH_STAR_DEPTH) {
+                continue;
+            }
+
+            Atom concreteEndNodeConstraint = Matcher.applyBindings(endNodeConstraint, currentPathBindings);
+            List<Bindings> endMatchAttempt = Matcher.matchAtoms(concreteEndNodeConstraint, currentNode);
+
+            for (Bindings endMatchSpecificBindings : endMatchAttempt) {
+                Bindings fullPathBindings = currentPathBindings.copy();
+                List<Bindings> merged = fullPathBindings.merge(endMatchSpecificBindings);
+                if (!merged.isEmpty()) {
+                    finalResults.add(merged.get(0));
+                }
+            }
+
+            if (currentDepth == MAX_PATH_STAR_DEPTH) {
+                continue;
+            }
+
+            Bindings bindingsForStepQuery = currentPathBindings.copy();
+            Atom resolvedLinkFromVarInPattern = Matcher.applyBindings(linkFromVarPlaceholder, bindingsForStepQuery);
+
+            if (resolvedLinkFromVarInPattern instanceof VariableAtom) {
+                if (!bindingsForStepQuery.addValueBinding((VariableAtom)resolvedLinkFromVarInPattern, currentNode)) {
+                    continue;
+                }
+            } else if (!resolvedLinkFromVarInPattern.equals(currentNode)) {
+                continue;
+            }
+
+            Atom stepQueryAtom = Matcher.applyBindings(linkPattern, bindingsForStepQuery);
+            if (stepQueryAtom instanceof VariableAtom || stepQueryAtom == null) {
+                continue;
+            }
+
+            List<Bindings> stepMatchResults = matchAgainstSpace(stepQueryAtom);
+
+            for (Bindings stepSpecificBindings : stepMatchResults) {
+                Bindings nextNodePathBindings = bindingsForStepQuery.copy();
+                List<Bindings> mergedStep = nextNodePathBindings.merge(stepSpecificBindings);
+
+                if (mergedStep.isEmpty()) {
+                    continue;
+                }
+                nextNodePathBindings = mergedStep.get(0);
+
+                Atom nextNodeConcrete = Matcher.applyBindings(linkToVarPlaceholder, nextNodePathBindings);
+
+                if (nextNodeConcrete == null || nextNodeConcrete instanceof VariableAtom) {
+                    continue;
+                }
+
+                if (!visitedWithDepth.contains(new Pair<>(nextNodeConcrete, currentDepth + 1))) {
+                    queue.offer(new Pair<>(nextNodeConcrete, new Pair<>(nextNodePathBindings, currentDepth + 1)));
+                    visitedWithDepth.add(new Pair<>(nextNodeConcrete, currentDepth + 1));
+                }
+            }
+        }
+
+        return finalResults.stream()
+            .map(b -> narrowVariables(b, overallRelevantVars))
+            .filter(b -> !b.hasLoop())
+            .distinct()
+            .collect(Collectors.toList());
     }
 }
