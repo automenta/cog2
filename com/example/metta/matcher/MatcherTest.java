@@ -2,12 +2,14 @@ package com.example.metta.matcher;
 
 import com.example.metta.atom.*;
 import com.example.metta.types.Bindings;
+import com.example.metta.text.SExprParser; // Added for parse helper
 import static com.example.metta.testing.MettaTestUtils.atom; // For convenience parsing
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
+import java.util.Collections;
 
 public class MatcherTest {
 
@@ -17,6 +19,7 @@ public class MatcherTest {
     private final SymbolAtom b = new SymbolAtom("B");
     private final SymbolAtom f = new SymbolAtom("f");
     private final SymbolAtom g = new SymbolAtom("g");
+    private final SymbolAtom h = new SymbolAtom("h");
 
     @Test
     void symbolVsSymbol() {
@@ -128,13 +131,13 @@ public class MatcherTest {
         // Expected: $g=h, $y=B
         VariableAtom gVar = new VariableAtom("g");
         ExpressionAtom pattern = new ExpressionAtom(List.of(f, new ExpressionAtom(List.of(gVar, a)), y));
-        ExpressionAtom target  = new ExpressionAtom(List.of(f, new ExpressionAtom(List.of(h, a)), b));
-        SymbolAtom h_sym = new SymbolAtom("h");
+        ExpressionAtom target  = new ExpressionAtom(List.of(f, new ExpressionAtom(List.of(this.h, a)), b));
+        // SymbolAtom h_sym = new SymbolAtom("h"); // Removed local variable
 
         List<Bindings> result = Matcher.matchAtoms(pattern, target);
         assertEquals(1, result.size());
         Bindings bnd = result.get(0);
-        assertEquals(h_sym, bnd.resolve(gVar));
+        assertEquals(this.h, bnd.resolve(gVar)); // Use field this.h
         assertEquals(b, bnd.resolve(y));
     }
 
@@ -194,7 +197,7 @@ public class MatcherTest {
             if (patternToMatch.equals(other)) { // Simple equality check for the demo
                 return matchResultsToReturn;
             }
-            return Collections.emptyList();
+            return Collections.emptyList(); // Simplified: import is at top-level
         }
     }
 
@@ -203,7 +206,7 @@ public class MatcherTest {
         // Pattern is a GroundedAtom with custom match logic
         Bindings customBinding = new Bindings();
         customBinding.addValueBinding(x, b); // $x = B
-        CustomMatchGroundable cmg = new CustomMatchGroundable(a, Collections.singletonList(customBinding)); // This will match 'A' and return $x=B
+        CustomMatchGroundable cmg = new CustomMatchGroundable(a, Collections.singletonList(customBinding)); // Simplified
         GroundedAtom patternGrounded = new GroundedAtom(cmg); // Wrap the Groundable logic
 
         // Target is 'A'
@@ -221,7 +224,7 @@ public class MatcherTest {
         // Target is a GroundedAtom with custom match logic
         Bindings customBinding = new Bindings();
         customBinding.addValueBinding(y, a); // $y = A
-        CustomMatchGroundable cmgTarget = new CustomMatchGroundable(b, Collections.singletonList(customBinding)); // This will match 'B' and return $y=A
+        CustomMatchGroundable cmgTarget = new CustomMatchGroundable(b, Collections.singletonList(customBinding)); // Simplified
         GroundedAtom targetGrounded = new GroundedAtom(cmgTarget);
 
         // Pattern is 'B'
@@ -236,7 +239,7 @@ public class MatcherTest {
     
     @Test
     void matchWithEmptyExpression() {
-        ExpressionAtom emptyExpr = new ExpressionAtom(Collections.emptyList());
+        ExpressionAtom emptyExpr = new ExpressionAtom(Collections.emptyList()); // Simplified
         List<Bindings> result = Matcher.matchAtoms(emptyExpr, emptyExpr);
         assertEquals(1, result.size());
         assertTrue(result.get(0).isEmpty());
@@ -247,5 +250,29 @@ public class MatcherTest {
         result = Matcher.matchAtoms(x, emptyExpr);
         assertEquals(1, result.size());
         assertEquals(emptyExpr, result.get(0).resolve(x));
+    }
+
+    // Helper parse method as requested
+    private Atom parse(String mettaSrc) {
+        return new SExprParser().parse(mettaSrc);
+    }
+
+    @Test
+    void testMatchExpressionWithVariablesAgainstGroundExpression() {
+        Atom pattern = parse("(A $1 $2)");
+        Atom data = parse("(A x y)");
+
+        List<Bindings> results = Matcher.matchAtoms(pattern, data);
+
+        assertEquals(1, results.size(), "Expected one successful binding set.");
+
+        if (!results.isEmpty()) {
+            Bindings resultBinding = results.get(0);
+            Atom val1 = resultBinding.resolve(new VariableAtom("$1"));
+            Atom val2 = resultBinding.resolve(new VariableAtom("$2"));
+
+            assertEquals(new SymbolAtom("x"), val1, "Variable $1 should be bound to x.");
+            assertEquals(new SymbolAtom("y"), val2, "Variable $2 should be bound to y.");
+        }
     }
 }

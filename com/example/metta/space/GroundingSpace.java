@@ -2,8 +2,11 @@ package com.example.metta.space;
 
 import com.example.metta.atom.Atom;
 import com.example.metta.atom.ExpressionAtom;
+import com.example.metta.atom.LinkAtom; // Added import
 import com.example.metta.atom.MettaSymbols;
 import com.example.metta.atom.VariableAtom;
+import com.example.metta.interpreter.ForwardChainer;
+import com.example.metta.interpreter.Pair; // Added import
 import com.example.metta.matcher.Matcher;
 import com.example.metta.types.Bindings;
 
@@ -13,18 +16,72 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.Collections; // Added for Collections.emptyList in narrowVariables
+import java.util.Queue;
+import java.util.LinkedList;
 
-public class GroundingSpace implements SpaceWriter {
+public class GroundingSpace implements SpaceWriter, SpaceReader { // Assuming SpaceReader is implemented or its methods are present
 
     private final Set<Atom> atoms;
+    private final ForwardChainer forwardChainer = new ForwardChainer();
+    private boolean enableForwardChaining = false;
 
     public GroundingSpace() {
         this.atoms = new HashSet<>();
     }
 
+    /**
+     * Enables or disables the automatic forward chaining mechanism.
+     * When enabled, adding facts to the space may trigger rules and derive new facts.
+     * @param enable true to enable forward chaining, false to disable.
+     */
+    public void setEnableForwardChaining(boolean enable) {
+        this.enableForwardChaining = enable;
+    }
+
     @Override
     public void add(Atom atom) {
-        this.atoms.add(atom);
+        // Add the initial atom to the main set of atoms.
+        // The boolean `isNewToSpace` indicates if this atom was actually new.
+        // This information isn't strictly used to decide IF chaining occurs,
+        // but it's often useful. Chaining will occur if enableForwardChaining is true,
+        // using 'atom' as the initial trigger.
+        boolean isNewToSpace = this.atoms.add(atom);
+
+        if (enableForwardChaining) {
+            Queue<Atom> processingQueue = new LinkedList<>();
+            // Offer the atom that was just 'added'. It's the primary trigger for this cycle.
+            processingQueue.offer(atom);
+
+            // This set tracks atoms that have been added to the queue during this specific
+            // invocation of add(), to prevent redundant processing within the same cascade.
+            Set<Atom> atomsQueuedForThisCascade = new HashSet<>();
+            atomsQueuedForThisCascade.add(atom);
+
+            while (!processingQueue.isEmpty()) {
+                Atom currentFactToProcess = processingQueue.poll();
+
+                // Create a snapshot of all atoms currently in the space.
+                // This ensures the chainer sees a consistent state for its reasoning step.
+                Set<Atom> allAtomsSnapshot = new HashSet<>(this.atoms);
+
+                // The forwardChainer's trigger method uses currentFactToProcess as the 'new fact'
+                // (the one that potentially completes a rule) and allAtomsSnapshot as the
+                // context of all other existing facts.
+                Set<Atom> newlyDerivedConclusions = forwardChainer.trigger(this, currentFactToProcess, allAtomsSnapshot);
+
+                for (Atom conclusion : newlyDerivedConclusions) {
+                    // `newlyDerivedConclusions` are already confirmed by `trigger`
+                    // not to be in `allAtomsSnapshot` that was passed to it (meaning they are new relative to that snapshot).
+                    // Now, we add it to the main `this.atoms` set in GroundingSpace.
+                    if (this.atoms.add(conclusion)) { // If truly new to the main atom set
+                        // And if we haven't already queued it up during this current `add` cascade
+                        if (atomsQueuedForThisCascade.add(conclusion)) {
+                            processingQueue.offer(conclusion);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Override
@@ -116,6 +173,8 @@ public class GroundingSpace implements SpaceWriter {
                     return Collections.singletonList(narrowVariables(new Bindings(), relevantVars));
                 }
                 resultBindings = executeConjunctiveQuery(children.subList(1, children.size()), relevantVars);
+            } else if (!children.isEmpty() && children.get(0).equals(MettaSymbols.TRAVERSE_SYMBOL)) {
+                resultBindings = executeTraversalQuery(exprPattern); // Call the new method
             } else {
                 resultBindings = matchAgainstSpace(queryPattern);
             }
@@ -131,9 +190,28 @@ public class GroundingSpace implements SpaceWriter {
     }
 
     private List<Bindings> matchAgainstSpace(Atom pattern) {
-        return this.atoms.stream()
-            .flatMap(dataAtom -> Matcher.matchAtoms(pattern, dataAtom).stream())
-            .collect(Collectors.toList());
+        System.err.println("DEBUG_MAS: Called with pattern: " + pattern);
+        List<Bindings> allResults = new ArrayList<>();
+        for (Atom dataAtom : this.atoms) {
+            Atom effectiveDataAtom = dataAtom;
+            boolean isLink = false;
+            if (dataAtom instanceof com.example.metta.atom.LinkAtom) {
+                effectiveDataAtom = ((com.example.metta.atom.LinkAtom)dataAtom).toExpressionAtom();
+                isLink = true;
+            }
+            System.err.println("DEBUG_MAS:   DataAtom: " + dataAtom + (isLink ? " (as Link, effective: " + effectiveDataAtom + ")" : ""));
+
+            List<Bindings> matchResults = Matcher.matchAtoms(pattern, effectiveDataAtom);
+
+            if (!matchResults.isEmpty()) {
+                System.err.println("DEBUG_MAS:     MATCHED! Pattern: " + pattern + " with EffectiveDataAtom: " + effectiveDataAtom + " -> Bindings: " + matchResults);
+                allResults.addAll(matchResults);
+            } else {
+                System.err.println("DEBUG_MAS:     NO MATCH. Pattern: " + pattern + " with EffectiveDataAtom: " + effectiveDataAtom);
+            }
+        }
+        System.err.println("DEBUG_MAS: Returning total " + allResults.size() + " bindings for pattern: " + pattern);
+        return allResults.stream().distinct().collect(Collectors.toList()); // Keep distinct for now
     }
 
     private List<Bindings> executeConjunctiveQuery(List<Atom> subQueries, Set<VariableAtom> relevantVars) {
@@ -166,5 +244,182 @@ public class GroundingSpace implements SpaceWriter {
             .map(bindings -> Matcher.applyBindings(template, bindings))
             .distinct()
             .collect(Collectors.toList());
+    }
+
+    private List<Bindings> executeTraversalQuery(ExpressionAtom queryExpr) {
+        if (queryExpr.getChildren().size() != 4) {
+            System.err.println("Warning: Traverse query expects 3 arguments (start, path, end), but got: " + (queryExpr.getChildren().size() -1));
+            return Collections.emptyList();
+        }
+
+        Atom startNodeConstraint = queryExpr.getChildren().get(1);
+        Atom pathPattern = queryExpr.getChildren().get(2);
+        Atom endNodeConstraint = queryExpr.getChildren().get(3);
+
+        List<Bindings> finalResults = new ArrayList<>();
+
+        if (pathPattern instanceof ExpressionAtom &&
+            !((ExpressionAtom) pathPattern).getChildren().isEmpty() &&
+            ((ExpressionAtom) pathPattern).getChildren().get(0).equals(MettaSymbols.PATH_SYMBOL)) {
+            // Sequential Path Logic
+            ExpressionAtom pathSequenceExpr = (ExpressionAtom) pathPattern;
+            List<Atom> linkPatternsInSequence = pathSequenceExpr.getChildren().subList(1, pathSequenceExpr.getChildren().size());
+
+            if (linkPatternsInSequence.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            List<Pair<Atom, Bindings>> currentIterationResults = new ArrayList<>();
+
+            // Initial Step: Populate currentIterationResults based on startNodeConstraint
+            if (startNodeConstraint instanceof VariableAtom) {
+                for (Atom atom : this.atoms) { // Consider all atoms as potential starts
+                    currentIterationResults.add(new Pair<>(atom, new Bindings()));
+                }
+            } else {
+                currentIterationResults.add(new Pair<>(startNodeConstraint, new Bindings()));
+            }
+
+            // Iterate through each link pattern in the sequence
+            for (Atom currentLinkPatternAtom : linkPatternsInSequence) {
+                if (!(currentLinkPatternAtom instanceof ExpressionAtom)) {
+                    return Collections.emptyList(); // Invalid path component
+                }
+                ExpressionAtom currentLinkPatternExpr = (ExpressionAtom) currentLinkPatternAtom;
+                List<Pair<Atom, Bindings>> nextIterationResults = new ArrayList<>();
+
+                Atom patternLinkType = currentLinkPatternExpr.getChildren().get(0);
+                List<Atom> patternTargets = currentLinkPatternExpr.getChildren().subList(1, currentLinkPatternExpr.getChildren().size());
+                if (patternTargets.isEmpty()) continue; // Or handle as error: path link must have targets
+
+                Atom patternStartTargetComponent = patternTargets.get(0);
+                Atom patternEndTargetComponent = patternTargets.size() == 1 ? patternStartTargetComponent : patternTargets.get(patternTargets.size() - 1);
+
+                for (Pair<Atom, Bindings> prevStepPair : currentIterationResults) {
+                    Atom prevStepEndNode = prevStepPair.getLeft(); // This is the node to start from for this step
+                    Bindings prevStepBindings = prevStepPair.getRight();
+
+                    for (Atom atomInSpace : this.atoms) {
+                        if (!(atomInSpace instanceof LinkAtom)) continue;
+                        LinkAtom actualLink = (LinkAtom) atomInSpace;
+
+                        if (!actualLink.getLinkType().equals(patternLinkType) ||
+                            actualLink.getTargets().size() != patternTargets.size()) {
+                            continue;
+                        }
+
+                        ExpressionAtom actualLinkAsExpr = actualLink.toExpressionAtom();
+                        List<Bindings> structuralMatches = Matcher.matchAtoms(currentLinkPatternExpr, actualLinkAsExpr);
+
+                        for (Bindings currentLinkBinding : structuralMatches) {
+                            // `currentLinkBinding` maps vars in `currentLinkPatternExpr` to parts of `actualLinkAsExpr`
+                            Bindings trialBindings = prevStepBindings.copy();
+                            List<Bindings> mergedStructural = trialBindings.merge(currentLinkBinding);
+                            if (mergedStructural.isEmpty()) continue;
+                            trialBindings = mergedStructural.get(0);
+
+                            // Check if prevStepEndNode matches the start of this actualLink, using trialBindings
+                            Atom boundPrevStepEndNode = Matcher.applyBindings(prevStepEndNode, trialBindings);
+                            Atom boundPatternStartTarget = Matcher.applyBindings(patternStartTargetComponent, trialBindings);
+
+                            List<Bindings> startConstraintMatches = Matcher.matchAtoms(boundPrevStepEndNode, boundPatternStartTarget);
+
+                            for (Bindings scm : startConstraintMatches) {
+                                Bindings iterationBinding = trialBindings.copy();
+                                List<Bindings> mergedScm = iterationBinding.merge(scm);
+                                if (mergedScm.isEmpty()) continue;
+                                iterationBinding = mergedScm.get(0);
+
+                                Atom nextNodeForPath = Matcher.applyBindings(patternEndTargetComponent, iterationBinding);
+                                nextIterationResults.add(new Pair<>(nextNodeForPath, iterationBinding));
+                            }
+                        }
+                    }
+                }
+                currentIterationResults = nextIterationResults.stream().distinct().collect(Collectors.toList());
+                if (currentIterationResults.isEmpty()) break; // Path broken
+            }
+
+            // Final Step: Filter by endNodeConstraint
+            List<Bindings> pathFinalResults = new ArrayList<>(); // Renamed to avoid conflict with outer finalResults
+            for (Pair<Atom, Bindings> pair : currentIterationResults) {
+                Atom lastNodeOfPath = pair.getLeft();
+                Bindings pathBindings = pair.getRight();
+
+                Atom boundEndNodeConstraint = Matcher.applyBindings(endNodeConstraint, pathBindings);
+                Atom boundLastNodeOfPath = Matcher.applyBindings(lastNodeOfPath, pathBindings); // Should be mostly concrete
+
+                List<Bindings> endMatches = Matcher.matchAtoms(boundEndNodeConstraint, boundLastNodeOfPath);
+                for (Bindings em : endMatches) {
+                    Bindings finalB = pathBindings.copy();
+                    List<Bindings> mergedEm = finalB.merge(em);
+                    if(!mergedEm.isEmpty()){
+                        pathFinalResults.add(mergedEm.get(0));
+                    }
+                }
+            }
+            return pathFinalResults.stream().distinct().collect(Collectors.toList()); // Return pathFinalResults here
+        } else if (pathPattern instanceof ExpressionAtom) {
+            // Single link traversal
+            ExpressionAtom singleLinkPatternExpr = (ExpressionAtom) pathPattern;
+
+            // potentialLinkMatches will contain bindings for variables within singleLinkPatternExpr
+            List<Bindings> potentialLinkMatches = matchAgainstSpace(singleLinkPatternExpr); // This will now have debug prints
+
+            if (singleLinkPatternExpr.getChildren().size() < 2) {
+                System.err.println("Warning: Single link pattern in Traverse must have at least a type and one target. Pattern: " + singleLinkPatternExpr);
+                return Collections.emptyList();
+            }
+
+            List<Atom> patternTargets = singleLinkPatternExpr.getChildren().subList(1, singleLinkPatternExpr.getChildren().size());
+            Atom patternStartTarget = patternTargets.get(0);
+            Atom patternEndTarget = patternTargets.size() == 1 ? patternStartTarget : patternTargets.get(patternTargets.size() - 1);
+
+            // The logic from Turn 45 for constraint checking (restored):
+            for (Bindings linkBinding : potentialLinkMatches) {
+                // Initial binding from matching the link pattern itself with a LinkAtom in space
+                Bindings baseBinding = linkBinding.copy();
+
+                Atom resolvedPatternStartTarget = Matcher.applyBindings(patternStartTarget, baseBinding);
+                Atom resolvedPatternEndTarget = Matcher.applyBindings(patternEndTarget, baseBinding);
+
+                // --- Start Constraint Check ---
+                // Match the query's startNodeConstraint against what the link's start resolved to.
+                List<Bindings> startConstraintMatches = Matcher.matchAtoms(startNodeConstraint, resolvedPatternStartTarget);
+
+                if (startConstraintMatches.isEmpty()) {
+                    // If no way to match startNodeConstraint with resolvedPatternStartTarget, this linkBinding path is invalid.
+                    continue;
+                }
+
+                // Attempt to merge the original linkBinding with the result of the start constraint match.
+                Bindings tempBindingsForStartMerge = linkBinding.copy();
+                List<Bindings> bindingsAfterStartConstraintApplied = tempBindingsForStartMerge.merge(startConstraintMatches.get(0));
+
+                if (bindingsAfterStartConstraintApplied.isEmpty()) {
+                    continue;
+                }
+                Bindings bindingWithStartConstraint = bindingsAfterStartConstraintApplied.get(0);
+
+                // --- End Constraint Check ---
+                Atom resolvedPatternEndTargetAfterStartConstraint = Matcher.applyBindings(patternEndTarget, bindingWithStartConstraint);
+                List<Bindings> endConstraintMatches = Matcher.matchAtoms(endNodeConstraint, resolvedPatternEndTargetAfterStartConstraint);
+
+                if (endConstraintMatches.isEmpty()) {
+                    continue;
+                }
+                List<Bindings> bindingWithEndConstraintApplied = bindingWithStartConstraint.copy().merge(endConstraintMatches.get(0));
+
+                if (bindingWithEndConstraintApplied.isEmpty()) {
+                    continue;
+                }
+
+                finalResults.add(bindingWithEndConstraintApplied.get(0));
+            }
+        } else {
+            System.err.println("Warning: Path pattern in Traverse must be an ExpressionAtom. Found: " + pathPattern);
+            return Collections.emptyList();
+        }
+        return finalResults.stream().distinct().collect(Collectors.toList());
     }
 }
