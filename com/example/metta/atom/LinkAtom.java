@@ -3,6 +3,7 @@ package com.example.metta.atom;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.ArrayList; // Added import
 
 /**
  * Represents a Link Atom, a typed connection between a set of target atoms.
@@ -74,5 +75,19 @@ public final class LinkAtom extends AbstractAtom {
         return linkType.getName() + targets.stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(" ", "(", ")"));
+    }
+
+    /**
+     * Converts this LinkAtom to an ExpressionAtom representation.
+     * The expression will have the link's type as the first child (operator)
+     * and the link's targets as subsequent children.
+     * E.g., LinkAtom(MyLink, [A, B]) becomes ExpressionAtom(MyLink, A, B).
+     * @return An {@link ExpressionAtom} representing this link.
+     */
+    public ExpressionAtom toExpressionAtom() {
+        List<Atom> children = new ArrayList<>();
+        children.add(this.linkType);
+        children.addAll(this.targets);
+        return new ExpressionAtom(children);
     }
 }

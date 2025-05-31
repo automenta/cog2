@@ -79,6 +79,11 @@ public final class MettaSymbols {
     /** Symbol representing an operation to superpose bindings. */
     public static final Atom SUPERPOSE_BIND_SYMBOL = new SymbolAtom("superpose-bind");
 
+    /** Symbol used for graph traversal queries, e.g., (Traverse $startNode (Path (LinkA $startNode $mid) (LinkB $mid $endNode)) $endNode). */
+    public static final Atom TRAVERSE_SYMBOL = new SymbolAtom("Traverse");
+    /** Symbol used within a Traverse query to specify a sequence of link patterns to be traversed. */
+    public static final Atom PATH_SYMBOL = new SymbolAtom("Path");
+
     /** Symbol used for type annotation or declaration (e.g., (isa $x Type)). */
     public static final Atom COLON_SYMBOL = new SymbolAtom(":");
 }
